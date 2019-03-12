@@ -16,4 +16,14 @@ public class Bullet : MonoBehaviour
     {
        
     }
+
+    void OnCollisionEnter(Collision collision)
+    {
+        if (collision.collider.tag == "Enemy")
+        {
+            Destroy(gameObject);
+            GameManage.gm.AddScore(5);
+            collision.gameObject.SendMessage("GetDamaged", 50);
+        }
+    }
 }
