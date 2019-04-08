@@ -1,0 +1,228 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using BehaviorTree;
+using UnityEngine.UI;
+
+public class EnemyBehaviour : MonoBehaviour
+{
+    // Start is called before the first frame update
+    private Tree<EnemyBehaviour> _tree;
+    private Tree<EnemyBehaviour> TestTree;
+
+    public GameObject player;
+    private Animator ani;
+    private TankHealth th;
+    public Text TankHealthText;
+
+    public float AttackRange=15;
+
+    public Rigidbody bullet;
+    public GameObject bulletLaunchEffect;
+    public AudioClip bulletLaunchAudio;
+    public float BulletFireMinForce = 2800;
+    public float BulletFireMaxForce = 3100;
+
+    public Rigidbody Plasma;
+    public GameObject PlasmaLaunchEffect;
+    public AudioClip PlasmaLaunchAudio;
+    public float PlasmaFireMinForce = 1800;
+    public float PlasmaFireMaxForce = 2100;
+
+    public GameObject Turret;
+    public GameObject LTurretEnd;
+    public GameObject RTurretEnd;
+    public GameObject LGunEnd;
+    public GameObject RGunEnd;
+    
+
+    void Start()
+    {
+        ani = GetComponent<Animator>();
+        th = GetComponent<TankHealth>();
+
+        _tree = new Tree<EnemyBehaviour>(
+            new Selector<EnemyBehaviour>
+                (
+                new Sequence<EnemyBehaviour>
+                    (
+                    new IsDead(),
+                    new SelfExplode()
+                    ),
+                new Sequence<EnemyBehaviour>
+                    (
+                    new IsInDanger(),
+                    new IsPlayerInRange(),
+                    new Defend(),
+                    new UseCannonAttack()
+                    ),
+                new Sequence<EnemyBehaviour>
+                    (
+                    new IsPlayerInRange(),
+                    new UseMachineGunAttack()
+                    ),
+                new Patrol()
+                 )
+            );
+
+       
+
+
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        TankHealthText.text = "BossHealth : " + th.TankCurentHealth;
+        _tree.Update(this);
+    }
+
+    public void Fire(GameObject Muzzle, GameObject MuzzleEffect, Rigidbody Bullet, float MinForce, float MaxForce)
+    { 
+            //   AudioSource.PlayClipAtPoint(shootingAudio, ShootPosition.transform.position);
+            GameObject bulletEffectInstance = Instantiate(MuzzleEffect, Muzzle.transform.position, Muzzle.transform.rotation);
+            bulletEffectInstance.transform.parent = Muzzle.transform;
+            Rigidbody bulletInstance;
+            bulletInstance = Instantiate(Bullet, Muzzle.transform.position, Turret.transform.rotation) as Rigidbody;
+            bulletInstance.AddForce(Muzzle.transform.right * Random.Range(MinForce, MaxForce));
+    }
+
+    public void Aim(GameObject target)
+    {
+        Turret.transform.LookAt(target.transform.position);
+    }
+
+    private float BulletShootTimer = 0;
+    public void ShootWithMachineGun()
+    {
+        Aim(player);
+        float MachineGunShootFrequency = 0.2f;
+        BulletShootTimer += Time.deltaTime;
+        if (BulletShootTimer >= MachineGunShootFrequency)
+        {
+            BulletShootTimer = 0;
+            Fire(LTurretEnd, bulletLaunchEffect, bullet, BulletFireMinForce, BulletFireMaxForce);
+            Fire(RTurretEnd, bulletLaunchEffect, bullet, BulletFireMinForce, BulletFireMaxForce);
+        }
+    }
+
+    private float PlasmaShootTimer = 0;
+    public void ShootWithCannon()
+    {
+        Aim(player);
+        float PlasmaShootFrequency = 1f;
+        PlasmaShootTimer += Time.deltaTime;
+        if (PlasmaShootTimer >= PlasmaShootFrequency)
+        {
+            PlasmaShootTimer = 0;
+            Fire(LGunEnd, PlasmaLaunchEffect, Plasma, PlasmaFireMinForce, PlasmaFireMaxForce);
+            Fire(RGunEnd, PlasmaLaunchEffect, Plasma, PlasmaFireMinForce, PlasmaFireMaxForce);
+        }
+    }
+
+    public GameObject explodeEffect;
+    public void Explode()
+    {
+        Object.Destroy(gameObject);
+        Object.Instantiate(explodeEffect, transform.position, transform.rotation);
+    }
+
+    public GameObject shield;
+    public void ActivatingShield()
+    {
+        shield.SetActive(true);
+    }
+    public void DeactivatingShield()
+    {
+        shield.SetActive(false);
+    }
+
+    public void moveForward(float a)
+    {
+        ani.SetFloat("Speed", 3);
+        a *= 0.02f;
+        transform.Translate(Vector3.forward * a);
+    }
+    public void RandomRotate()
+    {
+        float value = Random.Range(-3, 3);
+        ani.SetFloat("RotateSpeed", value);
+    }
+    public void Rotate(float a)
+    {
+        ani.SetFloat("RotateSpeed", a);
+    }
+    
+
+    private class IsInDanger : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            return enemy.th.TankCurentHealth < enemy.th.TankMaxHealth / 4;
+        }
+    }
+
+    private class IsDead : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            return enemy.th.TankCurentHealth<=0;
+        }
+    }
+
+    private class UseMachineGunAttack : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            enemy.ShootWithMachineGun();
+            return true;
+        }
+    }
+
+    private class UseCannonAttack : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            enemy.ShootWithCannon();
+            return true;
+        }
+    }
+
+    private class SelfExplode : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            enemy.Explode();
+            return true;
+        }
+    }
+
+    private class Defend : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            enemy.ActivatingShield();
+            return true;
+        }
+    }
+
+    private class Patrol : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            enemy.Rotate(-6);
+            enemy.moveForward(1.9f); 
+            return true;
+        }
+    }
+
+    private class IsPlayerInRange : Node<EnemyBehaviour>
+    {
+        public override bool Update(EnemyBehaviour enemy)
+        {
+            var playerPos = enemy.player.transform.position;
+            var enemyPos = enemy.transform.position;
+            return Vector3.Distance(playerPos, enemyPos) < enemy.AttackRange;
+        }
+    }
+}
